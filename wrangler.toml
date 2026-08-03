@@ -1,0 +1,8 @@
+name = "ubridge-relay"
+main = "workers/ubridge-durable-relay.mjs"
+compatibility_date = "2026-08-03"
+[durable_objects]
+bindings = [{ name = "UBRIDGE_ROOM", class_name = "UBridgeRoom" }]
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UBridgeRoom"]
