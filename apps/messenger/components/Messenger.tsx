@@ -86,9 +86,69 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   async function voiceCall() { if (peer) await connectP2P(peer, true); }
   function endVoice(sendSignal = true) { localStream.current?.getTracks().forEach((t) => t.stop()); localStream.current = null; setVoice("idle"); if (sendSignal && peer) void signal(peer.user_id, "hangup", {}); }
 
-  const recent = chats.slice(0, 80), pinned = chats.filter((c) => c.pinned), online = users.filter((u) => u.online), offline = users.filter((u) => !u.online);
-  return <main className="app"><audio ref={remoteAudio} autoPlay playsInline /><div className="top"><div className="brand"><img src="/ubridge-logo.svg" className="brandLogo"/>UBridge</div><input className="globalSearch" placeholder={tx.search} value={query} onChange={(e)=>setQuery(e.target.value)}/><div className="lang">{(["uz","en","ru"] as Lang[]).map(l=><button key={l} onClick={()=>{setLang(l);localStorage.setItem("ubridge_lang",l)}} className={lang===l?"on":""}>{l}</button>)}</div></div><div className="shell"><aside className="panel side"><div className="sideTop"><div className="meCompact"><div className="avatar">{name[0]?.toUpperCase()}</div><div><b>{name}</b><div className="small">{tx.ready}</div></div></div></div>{query&&<Section title="Search">{searchResults.map(r=><button className="user" key={r.messageId}><UIcon name="search"/><div><b>{r.text}</b><div className="small">{new Date(r.at).toLocaleTimeString()}</div></div></button>)}</Section>}<div className="chatList"><Section title={tx.chats}>{pinned.map(c=><ChatButton key={c.id} chat={c} active={chatKey===c.id} onClick={()=>openPeer({user_id:c.peerId,name:c.title,online:true,status:null,relay:null,last_seen:null})}/>)}{recent.map(c=><ChatButton key={c.id} chat={c} active={chatKey===c.id} onClick={()=>openPeer({user_id:c.peerId,name:c.title,online:true,status:null,relay:null,last_seen:null})}/>)}</Section></div><div className="onlineBlock"><Section title={tx.online}>{online.map(u=><UserButton key={u.user_id} u={u} active={peer?.user_id===u.user_id} onClick={()=>openPeer(u)}/>)}</Section><Section title={tx.offline}>{offline.map(u=><UserButton key={u.user_id} u={u} active={peer?.user_id===u.user_id} onClick={()=>openPeer(u)}/>)}</Section></div></aside><section className="panel chat">{!peer?<div className="empty"><img src="/ubridge-logo.svg"/><h1>{tx.select}</h1><p>{tx.selectSub}</p></div>:<><div className="chatHead"><div className="chatPerson"><div className="avatar big">{peer.name[0]?.toUpperCase()}</div><div><b>{peer.name}</b><div className="status">{typing?"typing…":connection==="connected"?tx.connected:connection==="connecting"?tx.connecting:tx.ready}</div></div></div><button className="callBtn" onClick={()=>void voiceCall()}><UIcon name="phone"/> {tx.call}</button></div><div className="messages">{messages.slice(-220).map(m=><div key={m.id} className={`msgRow ${m.from}`}><div className={`bubble ${m.from==="me"?"me":""}`} onContextMenu={e=>{e.preventDefault();setContext({message:m,x:e.clientX,y:e.clientY})}}>{m.replyTo&&<div className="replyMark">{tx.reply}</div>}<span>{m.deletedAt?"Message deleted":m.text}</span>{m.attachment&&<div className="attachment">{m.attachment.name}</div>}<div className="meta">{new Date(m.at).toLocaleTimeString()} · {m.delivery}{m.editedAt?" · edited":""}</div>{Object.keys(m.reactions).length>0&&<div className="reactions">{Object.entries(m.reactions).map(([e,n])=><span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd}/></div>{replyTo&&<div className="replyBar">{tx.reply}: {replyTo.text}<button onClick={()=>setReplyTo(null)}>×</button></div>}{editing&&<div className="replyBar">{tx.edit}<button onClick={()=>{setEditing(null);setText("")}}>×</button></div>}<div className="compose"><button className="roundBtn" title={tx.reaction}>😊</button><label className="roundBtn" title={tx.file}>+<input type="file" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void sendFile(f)}}/></label><input className="input" value={text} onChange={e=>setTypingSignal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')void send()}} placeholder={tx.message}/><button className="sendBtn" onClick={()=>void send()}><UIcon name="send"/> {tx.send}</button></div></>}</section>{voice!=="idle"&&<div className="callModal"><div className="callCard"><div className="avatar huge">{peer?.name[0]?.toUpperCase()}</div><h2>{tx.voiceTitle}</h2><p>{voice==="live"?tx.connected:tx.voiceSub}</p><button className="hang" onClick={()=>endVoice()}>{tx.hangup}</button></div></div>}{context&&<div className="menu" style={{left:context.x,top:context.y}}><button onClick={()=>setReplyTo(context.message)}>{tx.reply}</button><button onClick={()=>forward(context.message)}>Forward</button><button onClick={()=>edit(context.message)}>{tx.edit}</button><button onClick={()=>copy(context.message)}>{tx.copy}</button><button onClick={()=>react(context.message,"👍")}>👍 {tx.reaction}</button><button onClick={()=>del(context.message)}>{tx.del}</button></div>}</div></main>;
+  const recent = chats.slice(0, 120);
+  const pinned = chats.filter((c) => c.pinned);
+  const online = users.filter((u) => u.online);
+  const offline = users.filter((u) => !u.online);
+  const shellClass = `ub-shell ${peer ? "chat-open" : ""}`;
+
+  return (
+    <main className="ub-app">
+      <audio ref={remoteAudio} autoPlay playsInline />
+      <div className={shellClass}>
+        <aside className="sidebar">
+          <div className="sidebar-top">
+            <div className="brand-row">
+              <div className="brand-mark">
+                <img src="/ubridge-logo.svg" alt="UBridge" />
+                <div className="brand-copy"><strong>UBridge</strong><span>Secure Messenger</span></div>
+              </div>
+              <button className="theme-toggle" onClick={() => document.documentElement.classList.toggle("dark")} aria-label="Toggle theme"><UIcon name="moon" /></button>
+            </div>
+            <div className="search-box"><span className="search-icon"><UIcon name="search" /></span><input className="search-input" placeholder={tx.search} value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+          </div>
+
+          <div className="sidebar-scroll">
+            {query && <Section title="Search">{searchResults.map((r) => <button className="chat-item" key={r.messageId}><div className="avatar"><UIcon name="search" /></div><div className="chat-main"><div className="chat-name">{r.text}</div><div className="chat-preview">{new Date(r.at).toLocaleTimeString()}</div></div></button>)}</Section>}
+            <Section title="Pinned">{pinned.map((c) => <ChatButton key={c.id} chat={c} active={chatKey === c.id} onClick={() => openPeer({ user_id: c.peerId, name: c.title, online: true, status: null, relay: null, last_seen: null })} />)}</Section>
+            <Section title={tx.chats}>{recent.map((c) => <ChatButton key={c.id} chat={c} active={chatKey === c.id} onClick={() => openPeer({ user_id: c.peerId, name: c.title, online: true, status: null, relay: null, last_seen: null })} />)}</Section>
+          </div>
+
+          <div className="sidebar-bottom">
+            <Section title={tx.online}>{online.map((u) => <UserButton key={u.user_id} u={u} active={peer?.user_id === u.user_id} onClick={() => openPeer(u)} />)}</Section>
+            <Section title={tx.offline}>{offline.map((u) => <UserButton key={u.user_id} u={u} active={peer?.user_id === u.user_id} onClick={() => openPeer(u)} />)}</Section>
+          </div>
+        </aside>
+
+        <section className="chat-panel">
+          {!peer ? (
+            <div className="empty-state"><div className="empty-card"><img src="/ubridge-logo.svg" alt="" /><h1>{tx.select}</h1><p>{tx.selectSub}</p></div></div>
+          ) : (
+            <>
+              <header className="chat-header">
+                <button className="icon-button mobile-back" onClick={() => setPeer(null)} aria-label="Back"><UIcon name="arrow-left" /></button>
+                <div className="peer-info"><div className="avatar large">{peer.name[0]?.toUpperCase()}<span className="online-dot" /></div><div className="peer-copy"><strong>{peer.name}</strong><div className="peer-status">{typing ? "typing…" : connection === "connected" ? tx.connected : connection === "connecting" ? tx.connecting : tx.ready}</div></div></div>
+                <div className="header-actions"><button className="action-button primary" onClick={() => void voiceCall()}><UIcon name="phone" />{tx.call}</button><button className="action-button"><UIcon name="search" /></button><button className="action-button"><UIcon name="settings" /></button></div>
+              </header>
+
+              <div className="messages">{messages.slice(-220).map((m) => <div key={m.id} className={`message-row ${m.from}`}><div className={`message-bubble ${m.from === "me" ? "me" : ""} ${m.deletedAt ? "deleted" : ""}`} onContextMenu={(e) => { e.preventDefault(); setContext({ message: m, x: e.clientX, y: e.clientY }); }}>{m.replyTo && <div className="reply-mark">{tx.reply}</div>}<span>{m.deletedAt ? "Message deleted" : m.text}</span>{m.attachment && <div className="attachment">{m.attachment.name}</div>}<div className="message-meta"><span>{new Date(m.at).toLocaleTimeString()}</span><span>{m.delivery}</span></div>{Object.keys(m.reactions).length > 0 && <div className="reactions">{Object.entries(m.reactions).map(([e, n]) => <span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd} /></div>
+
+              {replyTo && <div className="reply-bar">{tx.reply}: {replyTo.text}<button onClick={() => setReplyTo(null)}>×</button></div>}
+              {editing && <div className="reply-bar">{tx.edit}<button onClick={() => { setEditing(null); setText(""); }}>×</button></div>}
+              <footer className="composer"><button className="round-button" title={tx.reaction}>😊</button><label className="round-button" title={tx.file}>+<input type="file" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); }} /></label><textarea className="composer-textarea" value={text} onChange={(e) => setTypingSignal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder={tx.message} /><button className="send-button" onClick={() => void send()}><UIcon name="send" />{tx.send}</button></footer>
+            </>
+          )}
+        </section>
+
+        <aside className="info-panel"><div className="info-card"><div className="avatar xl">{peer?.name[0]?.toUpperCase() || "U"}</div><h3>{peer?.name || "UBridge"}</h3><p>{peer ? "Encrypted local-first conversation" : "Secure realtime ecosystem"}</p></div><div className="info-list"><div className="info-row"><UIcon name="shield" />End-to-end encrypted</div><div className="info-row"><UIcon name="database" />Local-first history</div><div className="info-row"><UIcon name="link" />P2P when possible</div></div></aside>
+
+        {voice !== "idle" && <div className="call-modal"><div className="call-card"><div className="call-pulse"><div className="avatar huge">{peer?.name[0]?.toUpperCase()}</div></div><h2>{tx.voiceTitle}</h2><p>{voice === "live" ? tx.connected : tx.voiceSub}</p><div className="call-controls"><button className="icon-button"><UIcon name="volume" /></button><button className="icon-button"><UIcon name="mic" /></button><button className="hangup" onClick={() => endVoice()}><UIcon name="close" /></button></div></div></div>}
+        {context && <div className="context-menu" style={{ left: context.x, top: context.y }}><button onClick={() => setReplyTo(context.message)}><UIcon name="message" />{tx.reply}</button><button onClick={() => forward(context.message)}><UIcon name="share" />Forward</button><button onClick={() => edit(context.message)}><UIcon name="edit" />{tx.edit}</button><button onClick={() => copy(context.message)}><UIcon name="copy" />{tx.copy}</button><button onClick={() => react(context.message, "👍")}>👍 {tx.reaction}</button><button onClick={() => del(context.message)}><UIcon name="trash" />{tx.del}</button></div>}
+      </div>
+    </main>
+  );
 }
-function Section({title,children}:{title:string;children:React.ReactNode}){return <div className="section"><div className="sectionTitle">{title}</div><div className="users">{children}</div></div>}
-function UserButton({u,active,onClick}:{u:UserRow;active:boolean;onClick:()=>void}){return <button className={`user ${active?"active":""}`} onClick={onClick}><div className="avatar">{u.name[0]?.toUpperCase()}</div><div style={{flex:1}}><b>{u.name}</b><div className="small">{u.status||"offline"}</div></div><span className={`dot ${u.online?"on":""}`}/></button>}
-function ChatButton({chat,active,onClick}:{chat:LocalChat;active:boolean;onClick:()=>void}){return <button className={`user ${active?"active":""}`} onClick={onClick}><div className="avatar">{chat.title[0]?.toUpperCase()}</div><div style={{flex:1,minWidth:0}}><b>{chat.title}</b><div className="small truncate">{chat.typing?"typing…":chat.lastMessage||"No messages"}</div></div>{chat.unread>0&&<span className="unread">{chat.unread}</span>}</button>}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) { return <section><div className="section-title">{title}</div><div className="section-list">{children}</div></section>; }
+function UserButton({ u, active, onClick }: { u: UserRow; active: boolean; onClick: () => void }) { return <button className={`chat-item ${active ? "active" : ""}`} onClick={onClick}><div className="avatar">{u.name[0]?.toUpperCase()}{u.online && <span className="online-dot" />}</div><div className="chat-main"><div className="chat-name-row"><span className="chat-name">{u.name}</span></div><div className="chat-preview">{u.status || "offline"}</div></div><div className="chat-meta"><span className="chat-time">{u.online ? "now" : ""}</span></div></button>; }
+function ChatButton({ chat, active, onClick }: { chat: LocalChat; active: boolean; onClick: () => void }) { return <button className={`chat-item ${active ? "active" : ""}`} onClick={onClick}><div className="avatar">{chat.title[0]?.toUpperCase()}</div><div className="chat-main"><div className="chat-name-row"><span className="chat-name">{chat.title}</span></div><div className="chat-preview">{chat.typing ? "typing…" : chat.lastMessage || "No messages"}</div></div><div className="chat-meta"><span className="chat-time">{chat.lastAt ? new Date(chat.lastAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>{chat.unread > 0 && <span className="unread">{chat.unread}</span>}</div></button>; }
