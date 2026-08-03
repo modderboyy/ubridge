@@ -44,6 +44,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   const [context, setContext] = useState<ContextState>(null);
   const [connection, setConnection] = useState<"idle" | "connecting" | "connected">("idle");
   const [voice, setVoice] = useState<"idle" | "calling" | "live">("idle");
+  const [pendingCall, setPendingCall] = useState<SignalRow | null>(null);
   const [typing, setTyping] = useState(false);
   const pc = useRef<RTCPeerConnection | null>(null);
   const dc = useRef<RTCDataChannel | null>(null);
@@ -54,7 +55,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   const chatKey = peer ? chatIdFor(peer.user_id) : "";
 
   useEffect(() => { const saved = (localStorage.getItem("uflow_lang") || localStorage.getItem("ubridge_lang") || navigator.language.slice(0,2)) as Lang; if (["uz","en","ru"].includes(saved)) setLang(saved); }, []);
-  useEffect(() => { void bootstrap(); const beat = setInterval(() => { void upsertMe(connection === "connected" ? "online" : "online"); void drainQueue(); void pollSignals(); void cleanup(); }, 2500); const channel = supabase.channel("ubridge-live").on("postgres_changes", { event: "*", schema: "public", table: "ubridge_users_v" }, () => void loadUsers()).subscribe(); const onUnload = () => { void supabase.rpc("ubridge_offline"); }; window.addEventListener("beforeunload", onUnload); return () => { clearInterval(beat); void supabase.removeChannel(channel); window.removeEventListener("beforeunload", onUnload); }; }, [connection, peer]);
+  useEffect(() => { void bootstrap(); void ensurePushPermission(); const beat = setInterval(() => { void upsertMe(connection === "connected" ? "online" : "online"); void drainQueue(); void pollSignals(); void cleanup(); }, 2500); const channel = supabase.channel("ubridge-live").on("postgres_changes", { event: "*", schema: "public", table: "ubridge_users_v" }, () => void loadUsers()).subscribe(); const onUnload = () => { void supabase.rpc("ubridge_offline"); }; window.addEventListener("beforeunload", onUnload); return () => { clearInterval(beat); void supabase.removeChannel(channel); window.removeEventListener("beforeunload", onUnload); }; }, [connection, peer]);
   useEffect(() => { void searchLocal(query).then(setSearchResults); }, [query]);
   useEffect(() => {
     const box = messagesBox.current;
@@ -62,21 +63,77 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
     box.scrollTop = box.scrollHeight;
   }, [messages.length, peer?.user_id]);
 
+
+  function vapidKey() { return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ""; }
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+  async function ensurePushPermission() {
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      if (Notification.permission === "default") await Notification.requestPermission();
+      if (Notification.permission !== "granted" || !vapidKey()) return;
+      const existing = await reg.pushManager.getSubscription();
+      const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey()) });
+      await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
+    } catch {}
+  }
+  async function notifyPeer(to: string, title: string, body: string) {
+    try { await fetch("/api/push/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, title, body }) }); } catch {}
+  }
+
   async function bootstrap() { await upsertMe("online"); await loadUsers(); await refreshChats(); await drainQueue(); await pollSignals(); }
   async function cleanup() { try { await supabase.rpc("ubridge_cleanup"); } catch {} }
   async function upsertMe(status: string) { await supabase.rpc("ubridge_upsert_me", { p_name: name, p_relay: "supabase+webrtc", p_status: status }); }
   async function loadUsers() { const { data } = await supabase.from("ubridge_users_v").select("*").neq("user_id", initialUser.id).order("online", { ascending: false }); setUsers((data || []) as UserRow[]); }
   async function refreshChats() { setChats(await listChats()); }
-  async function openPeer(u: UserRow) { setPeer(u); const id = chatIdFor(u.user_id); await upsertChat({ id, peerId: u.user_id, title: u.name, pinned: false, unread: 0, lastMessage: "", lastAt: Date.now(), typing: false }); setMessages(await listMessages(id, 160)); await refreshChats(); void connectP2P(u); }
+  async function openPeer(u: UserRow) { setPeer(u); const id = chatIdFor(u.user_id); await upsertChat({ id, peerId: u.user_id, title: u.name, pinned: false, unread: 0, lastMessage: "", lastAt: Date.now(), typing: false }); setMessages(await listMessages(id, 160)); await syncHistory(u); await refreshChats(); void connectP2P(u); }
   async function storeMessage(m: LocalMessage) { await saveMessage(m); setMessages((prev) => prev.some((x) => x.id === m.id) ? prev.map((x) => x.id === m.id ? m : x) : [...prev, m]); const c: LocalChat = { id: m.chatId, peerId: peer?.user_id || m.chatId.replace("direct:", ""), title: peer?.name || "Chat", pinned: false, unread: m.from === "peer" ? 1 : 0, lastMessage: m.deletedAt ? "Deleted" : m.text, lastAt: m.at, typing: false }; await upsertChat(c); await refreshChats(); }
   async function pollSignals() { const { data } = await supabase.rpc("ubridge_poll_signals"); if (Array.isArray(data)) for (const row of data) await handleSignal(row as SignalRow); }
   async function drainQueue() { const { data } = await supabase.rpc("ubridge_queue_drain"); if (Array.isArray(data)) for (const row of data) { try { const body = row.body?.box ? await decryptFor(row.from_user, initialUser.id, row.body.box) : row.body; const id = chatIdFor(row.from_user); await saveMessage({ id: messageId(), chatId: id, from: "peer", text: body.text || JSON.stringify(body), at: Date.now(), reactions: {}, delivery: "delivered", encrypted: true, signature: body.signature }); await upsertChat({ id, peerId: row.from_user, title: users.find((u) => u.user_id === row.from_user)?.name || "Chat", pinned: false, unread: 1, lastMessage: body.text || "Encrypted packet", lastAt: Date.now(), typing: false }); if (peer?.user_id === row.from_user) setMessages(await listMessages(id, 160)); } catch {} } await refreshChats(); }
+
+  async function syncHistory(target: UserRow) {
+    const { data } = await supabase.rpc("ubridge_history_sync", { p_peer: target.user_id, p_after: "1970-01-01T00:00:00Z" });
+    if (!Array.isArray(data)) return;
+    const id = chatIdFor(target.user_id);
+    for (const row of data) {
+      try {
+        const body = row.body?.box ? await decryptFor(row.from_user, row.to_user, row.body.box) : row.body;
+        await saveMessage({ id: row.client_message_id || row.id, chatId: id, from: row.from_user === initialUser.id ? "me" : "peer", text: body.text || JSON.stringify(body), at: new Date(row.created_at).getTime(), replyTo: body.replyTo || null, reactions: {}, delivery: "delivered", encrypted: true, signature: body.signature });
+      } catch {}
+    }
+    setMessages(await listMessages(id, 160));
+  }
 
   function makePc(target: UserRow) { pc.current?.close(); const next = new RTCPeerConnection({ iceServers: ICE }); pc.current = next; next.onicecandidate = (e) => { if (e.candidate) void signal(target.user_id, "candidate", e.candidate.toJSON()); }; next.onconnectionstatechange = () => { if (next.connectionState === "connected") { setConnection("connected"); if (localStream.current) setVoice("live"); } }; next.ondatachannel = (event) => attachDc(event.channel, target); next.ontrack = (event) => { if (remoteAudio.current) { remoteAudio.current.srcObject = event.streams[0]; void remoteAudio.current.play().catch(() => {}); } setVoice("live"); }; return next; }
   function attachDc(channel: RTCDataChannel, target = peer) { dc.current = channel; channel.onopen = () => { setConnection("connected"); if (target) void storeMessage(systemMsg(chatIdFor(target.user_id), tx.connected)); }; channel.onclose = () => setConnection("idle"); channel.onmessage = async (e) => { try { const msg = JSON.parse(String(e.data)); if (msg.typing) { setTyping(Boolean(msg.typing)); return; } const body = msg.box && target ? await decryptFor(target.user_id, initialUser.id, msg.box) : msg; if (target) await storeMessage({ id: messageId(), chatId: chatIdFor(target.user_id), from: "peer", text: body.text || (body.fileName ? `File: ${body.fileName}` : JSON.stringify(body)), at: Date.now(), reactions: {}, delivery: "delivered", encrypted: true, signature: body.signature, attachment: body.fileName ? { name: body.fileName, mime: body.mime, size: body.size } : undefined }); } catch {} }; }
   async function connectP2P(target: UserRow, withVoice = false) { setPeer(target); setConnection("connecting"); const conn = makePc(target); if (withVoice) await addVoice(conn); attachDc(conn.createDataChannel("ubridge-message"), target); const offer = await conn.createOffer(); await conn.setLocalDescription(offer); await signal(target.user_id, "offer", offer); }
   async function addVoice(conn: RTCPeerConnection) { setVoice("calling"); localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); localStream.current.getTracks().forEach((t) => conn.addTrack(t, localStream.current!)); }
   async function handleSignal(row: SignalRow) { if (row.from_user === initialUser.id) return; const target = users.find((u) => u.user_id === row.from_user) || peer || { user_id: row.from_user, name: "Chat", online: true, status: null, relay: null, last_seen: null }; if (!peer) await openPeer(target); if (row.kind === "offer") { setConnection("connecting"); const conn = makePc(target); await conn.setRemoteDescription(new RTCSessionDescription(row.payload)); const ans = await conn.createAnswer(); await conn.setLocalDescription(ans); await signal(row.from_user, "answer", ans); } else if (row.kind === "answer" && pc.current) await pc.current.setRemoteDescription(new RTCSessionDescription(row.payload)); else if (row.kind === "candidate" && pc.current) await pc.current.addIceCandidate(new RTCIceCandidate(row.payload)).catch(() => {}); else if (row.kind === "hangup") endVoice(false); }
+  async function answerCall() {
+    if (!pendingCall) return;
+    const row = pendingCall;
+    const target = users.find((u) => u.user_id === row.from_user) || peer || { user_id: row.from_user, name: row.payload?.callerName || "Caller", online: true, status: null, relay: null, last_seen: null };
+    setPeer(target); setPendingCall(null); setVoice("calling"); setConnection("connecting");
+    const conn = makePc(target);
+    await addVoice(conn);
+    await conn.setRemoteDescription(new RTCSessionDescription(row.payload));
+    const answer = await conn.createAnswer();
+    await conn.setLocalDescription(answer);
+    await signal(row.from_user, "answer", answer);
+  }
+
+  function rejectCall() {
+    if (pendingCall) void signal(pendingCall.from_user, "hangup", {});
+    setPendingCall(null); setVoice("idle");
+  }
+
   async function signal(to: string, kind: SignalRow["kind"], payload: any) { await supabase.rpc("ubridge_signal", { p_to: to, p_kind: kind, p_payload: payload }); }
   function systemMsg(chatId: string, text: string): LocalMessage { return { id: messageId(), chatId, from: "system", text, at: Date.now(), reactions: {}, delivery: "read", encrypted: false }; }
 
@@ -88,7 +145,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   function copy(m: LocalMessage) { void navigator.clipboard?.writeText(m.text); }
   function edit(m: LocalMessage) { setEditing(m); setText(m.text); }
   function forward(m: LocalMessage) { setText(`Forwarded: ${m.text}`); }
-  async function voiceCall() { if (peer) await connectP2P(peer, true); }
+  async function voiceCall() { if (peer) { await notifyPeer(peer.user_id, `${name} is calling`, "Incoming UBridge voice call"); await connectP2P(peer, true); } }
   function endVoice(sendSignal = true) { localStream.current?.getTracks().forEach((t) => t.stop()); localStream.current = null; setVoice("idle"); if (sendSignal && peer) void signal(peer.user_id, "hangup", {}); }
 
   const recent = chats.slice(0, 120);
@@ -147,7 +204,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
 
         <aside className="info-panel"><div className="info-card"><div className="avatar xl">{peer?.name[0]?.toUpperCase() || "U"}</div><h3>{peer?.name || "UBridge"}</h3><p>{peer ? "Encrypted local-first conversation" : "Secure realtime ecosystem"}</p></div><div className="info-list"><div className="info-row"><UIcon name="shield" />End-to-end encrypted</div><div className="info-row"><UIcon name="database" />Local-first history</div><div className="info-row"><UIcon name="link" />P2P when possible</div></div></aside>
 
-        {voice !== "idle" && <div className="call-modal"><div className="call-card"><div className="call-pulse"><div className="avatar huge">{peer?.name[0]?.toUpperCase()}</div></div><h2>{tx.voiceTitle}</h2><p>{voice === "live" ? tx.connected : tx.voiceSub}</p><div className="call-controls"><button className="icon-button"><UIcon name="volume" /></button><button className="icon-button"><UIcon name="mic" /></button><button className="hangup" onClick={() => endVoice()}><UIcon name="close" /></button></div></div></div>}
+        {(voice !== "idle" || pendingCall) && <div className="call-modal"><div className="call-card"><div className="call-pulse"><div className="avatar huge">{(pendingCall?.payload?.callerName || peer?.name || "U")[0]?.toUpperCase()}</div></div><h2>{pendingCall ? (pendingCall.payload?.callerName || "Incoming call") : tx.voiceTitle}</h2><p>{pendingCall ? "Incoming encrypted voice call" : voice === "live" ? tx.connected : tx.voiceSub}</p><div className="call-controls">{pendingCall && <button className="action-button primary" onClick={() => void answerCall()}><UIcon name="phone" />Answer</button>}<button className="icon-button"><UIcon name="volume" /></button><button className="icon-button"><UIcon name="mic" /></button><button className="hangup" onClick={() => pendingCall ? rejectCall() : endVoice()}><UIcon name="close" /></button></div></div></div>}
         {context && <div className="context-menu" style={{ left: context.x, top: context.y }}><button onClick={() => setReplyTo(context.message)}><UIcon name="message" />{tx.reply}</button><button onClick={() => forward(context.message)}><UIcon name="share" />Forward</button><button onClick={() => edit(context.message)}><UIcon name="edit" />{tx.edit}</button><button onClick={() => copy(context.message)}><UIcon name="copy" />{tx.copy}</button><button onClick={() => react(context.message, "👍")}>👍 {tx.reaction}</button><button onClick={() => del(context.message)}><UIcon name="trash" />{tx.del}</button></div>}
       </div>
     </main>
