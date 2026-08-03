@@ -42,6 +42,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   const [replyTo, setReplyTo] = useState<LocalMessage | null>(null);
   const [editing, setEditing] = useState<LocalMessage | null>(null);
   const [context, setContext] = useState<ContextState>(null);
+  const [pushState, setPushState] = useState<"checking" | "granted" | "default" | "denied" | "unsupported">("checking");
   const [connection, setConnection] = useState<"idle" | "connecting" | "connected">("idle");
   const [voice, setVoice] = useState<"idle" | "calling" | "live">("idle");
   const [pendingCall, setPendingCall] = useState<SignalRow | null>(null);
@@ -52,9 +53,10 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
   const messagesBox = useRef<HTMLDivElement | null>(null);
+  const longPress = useRef<number | null>(null);
   const chatKey = peer ? chatIdFor(peer.user_id) : "";
 
-  useEffect(() => { const saved = (localStorage.getItem("uflow_lang") || localStorage.getItem("ubridge_lang") || navigator.language.slice(0,2)) as Lang; if (["uz","en","ru"].includes(saved)) setLang(saved); }, []);
+  useEffect(() => { const saved = (localStorage.getItem("uflow_lang") || localStorage.getItem("ubridge_lang") || navigator.language.slice(0,2)) as Lang; if (["uz","en","ru"].includes(saved)) setLang(saved); if (!("Notification" in window)) setPushState("unsupported"); else setPushState(Notification.permission as any); }, []);
   useEffect(() => { void bootstrap(); void ensurePushPermission(); const beat = setInterval(() => { void upsertMe(connection === "connected" ? "online" : "online"); void drainQueue(); void pollSignals(); void cleanup(); }, 2500); const channel = supabase.channel("ubridge-live").on("postgres_changes", { event: "*", schema: "public", table: "ubridge_users_v" }, () => void loadUsers()).subscribe(); const onUnload = () => { void supabase.rpc("ubridge_offline"); }; window.addEventListener("beforeunload", onUnload); return () => { clearInterval(beat); void supabase.removeChannel(channel); window.removeEventListener("beforeunload", onUnload); }; }, [connection, peer]);
   useEffect(() => { void searchLocal(query).then(setSearchResults); }, [query]);
   useEffect(() => {
@@ -75,17 +77,34 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   }
   async function ensurePushPermission() {
     try {
-      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) { setPushState("unsupported"); return; }
       const reg = await navigator.serviceWorker.register("/sw.js");
-      if (Notification.permission === "default") await Notification.requestPermission();
+      if (Notification.permission === "default") {
+        const permission = await Notification.requestPermission();
+        setPushState(permission as any);
+      } else setPushState(Notification.permission as any);
       if (Notification.permission !== "granted" || !vapidKey()) return;
       const existing = await reg.pushManager.getSubscription();
       const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey()) });
       await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
-    } catch {}
+      setPushState("granted");
+    } catch { if ("Notification" in window) setPushState(Notification.permission as any); }
   }
-  async function notifyPeer(to: string, title: string, body: string) {
-    try { await fetch("/api/push/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, title, body }) }); } catch {}
+  async function notifyPeer(to: string, title: string, body: string, kind: "message" | "call" = "message") {
+    try { await fetch("/api/push/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, title, body, kind }) }); } catch {}
+  }
+
+  function openContext(message: LocalMessage, x: number, y: number) {
+    setContext({ message, x: Math.min(x, window.innerWidth - 190), y: Math.min(y, window.innerHeight - 260) });
+  }
+  function startLongPress(message: LocalMessage, e: React.PointerEvent) {
+    if (longPress.current) window.clearTimeout(longPress.current);
+    const x = e.clientX, y = e.clientY;
+    longPress.current = window.setTimeout(() => openContext(message, x, y), 520);
+  }
+  function cancelLongPress() {
+    if (longPress.current) window.clearTimeout(longPress.current);
+    longPress.current = null;
   }
 
   async function bootstrap() { await upsertMe("online"); await loadUsers(); await refreshChats(); await drainQueue(); await pollSignals(); }
@@ -145,7 +164,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   function copy(m: LocalMessage) { void navigator.clipboard?.writeText(m.text); }
   function edit(m: LocalMessage) { setEditing(m); setText(m.text); }
   function forward(m: LocalMessage) { setText(`Forwarded: ${m.text}`); }
-  async function voiceCall() { if (peer) { await notifyPeer(peer.user_id, `${name} is calling`, "Incoming UBridge voice call"); await connectP2P(peer, true); } }
+  async function voiceCall() { if (peer) { await notifyPeer(peer.user_id, `${name} is calling`, "Incoming UBridge voice call", "call"); await connectP2P(peer, true); } }
   function endVoice(sendSignal = true) { localStream.current?.getTracks().forEach((t) => t.stop()); localStream.current = null; setVoice("idle"); if (sendSignal && peer) void signal(peer.user_id, "hangup", {}); }
 
   const recent = chats.slice(0, 120);
@@ -157,7 +176,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   return (
     <main className="ub-app">
       <audio ref={remoteAudio} autoPlay playsInline />
-      <div className={shellClass}>
+      {pushState !== "granted" && pushState !== "unsupported" && <div className="push-permission"><div><b>Enable notifications</b><span>Receive calls and message alerts even when UBridge is in the background.</span></div><button onClick={() => void ensurePushPermission()}>Enable</button></div>}<div className={shellClass}>
         <aside className="sidebar">
           <div className="sidebar-top">
             <div className="brand-row">
@@ -193,7 +212,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
                 <div className="header-actions"><button className="action-button primary" onClick={() => void voiceCall()}><UIcon name="phone" />{tx.call}</button><button className="action-button"><UIcon name="search" /></button><button className="action-button"><UIcon name="settings" /></button></div>
               </header>
 
-              <div className="messages" ref={messagesBox}>{messages.slice(-220).map((m) => <div key={m.id} className={`message-row ${m.from}`}><div className={`message-bubble ${m.from === "me" ? "me" : ""} ${m.deletedAt ? "deleted" : ""}`} onContextMenu={(e) => { e.preventDefault(); setContext({ message: m, x: e.clientX, y: e.clientY }); }}>{m.replyTo && <div className="reply-mark">{tx.reply}</div>}<span>{m.deletedAt ? "Message deleted" : m.text}</span>{m.attachment && <div className="attachment">{m.attachment.name}</div>}<div className="message-meta"><span>{new Date(m.at).toLocaleTimeString()}</span><span>{m.delivery}</span></div>{Object.keys(m.reactions).length > 0 && <div className="reactions">{Object.entries(m.reactions).map(([e, n]) => <span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd} /></div>
+              <div className="messages" ref={messagesBox}>{messages.slice(-220).map((m) => <div key={m.id} className={`message-row ${m.from}`}><div className={`message-bubble ${m.from === "me" ? "me" : ""} ${m.deletedAt ? "deleted" : ""}`} onPointerDown={(e) => startLongPress(m, e)} onPointerUp={cancelLongPress} onPointerCancel={cancelLongPress} onPointerMove={(e) => { if (Math.abs(e.movementX) + Math.abs(e.movementY) > 12) cancelLongPress(); }} onContextMenu={(e) => { e.preventDefault(); openContext(m, e.clientX, e.clientY); }}>{m.replyTo && <div className="reply-mark">{tx.reply}</div>}<span>{m.deletedAt ? "Message deleted" : m.text}</span>{m.attachment && <div className="attachment">{m.attachment.name}</div>}<div className="message-meta"><span>{new Date(m.at).toLocaleTimeString()}</span><span>{m.delivery}</span></div>{Object.keys(m.reactions).length > 0 && <div className="reactions">{Object.entries(m.reactions).map(([e, n]) => <span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd} /></div>
 
               {replyTo && <div className="reply-bar">{tx.reply}: {replyTo.text}<button onClick={() => setReplyTo(null)}>×</button></div>}
               {editing && <div className="reply-bar">{tx.edit}<button onClick={() => { setEditing(null); setText(""); }}>×</button></div>}
