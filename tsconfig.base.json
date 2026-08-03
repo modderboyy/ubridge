@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "strict": true,
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "stripInternal": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ubridge/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@ubridge/crypto": [
+        "packages/crypto/src/index.ts"
+      ],
+      "@ubridge/protocol": [
+        "packages/protocol/src/index.ts"
+      ],
+      "@ubridge/transport": [
+        "packages/transport/src/index.ts"
+      ],
+      "@ubridge/client": [
+        "packages/client/src/index.ts"
+      ]
+    }
+  }
+}
