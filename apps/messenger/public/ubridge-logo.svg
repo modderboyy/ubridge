@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="UBridge logo">
+  <rect width="512" height="512" rx="118" fill="#050505"/>
+  <path d="M256 96 388 146v94c0 84-52 148-132 176-80-28-132-92-132-176v-94L256 96Z" fill="none" stroke="#fff" stroke-width="34" stroke-linejoin="round"/>
+  <path d="M178 272h69c22 0 36-14 36-36s-14-36-36-36h-34" fill="none" stroke="#fff" stroke-width="32" stroke-linecap="round"/>
+  <path d="M334 240h-69c-22 0-36 14-36 36s14 36 36 36h34" fill="none" stroke="#fff" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="256" cy="256" r="18" fill="#fff"/>
+</svg>
