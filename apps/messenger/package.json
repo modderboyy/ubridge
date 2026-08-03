@@ -11,18 +11,19 @@
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.0",
+    "@ubridge/client": "0.1.0",
+    "@ubridge/core": "0.1.0",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "@ubridge/client": "0.1.0",
-    "@ubridge/core": "0.1.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5",
-    "@types/web-push": "^3.6.4"
+    "@types/web-push": "^3.6.4",
+    "typescript": "^5"
   }
 }
