@@ -50,12 +50,17 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
   const localStream = useRef<MediaStream | null>(null);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
   const messagesEnd = useRef<HTMLDivElement | null>(null);
+  const messagesBox = useRef<HTMLDivElement | null>(null);
   const chatKey = peer ? chatIdFor(peer.user_id) : "";
 
   useEffect(() => { const saved = (localStorage.getItem("uflow_lang") || localStorage.getItem("ubridge_lang") || navigator.language.slice(0,2)) as Lang; if (["uz","en","ru"].includes(saved)) setLang(saved); }, []);
   useEffect(() => { void bootstrap(); const beat = setInterval(() => { void upsertMe(connection === "connected" ? "online" : "online"); void drainQueue(); void pollSignals(); void cleanup(); }, 2500); const channel = supabase.channel("ubridge-live").on("postgres_changes", { event: "*", schema: "public", table: "ubridge_users_v" }, () => void loadUsers()).subscribe(); const onUnload = () => { void supabase.rpc("ubridge_offline"); }; window.addEventListener("beforeunload", onUnload); return () => { clearInterval(beat); void supabase.removeChannel(channel); window.removeEventListener("beforeunload", onUnload); }; }, [connection, peer]);
   useEffect(() => { void searchLocal(query).then(setSearchResults); }, [query]);
-  useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length, peer?.user_id]);
+  useEffect(() => {
+    const box = messagesBox.current;
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
+  }, [messages.length, peer?.user_id]);
 
   async function bootstrap() { await upsertMe("online"); await loadUsers(); await refreshChats(); await drainQueue(); await pollSignals(); }
   async function cleanup() { try { await supabase.rpc("ubridge_cleanup"); } catch {} }
@@ -131,7 +136,7 @@ export default function Messenger({ initialUser }: { initialUser: { id: string; 
                 <div className="header-actions"><button className="action-button primary" onClick={() => void voiceCall()}><UIcon name="phone" />{tx.call}</button><button className="action-button"><UIcon name="search" /></button><button className="action-button"><UIcon name="settings" /></button></div>
               </header>
 
-              <div className="messages">{messages.slice(-220).map((m) => <div key={m.id} className={`message-row ${m.from}`}><div className={`message-bubble ${m.from === "me" ? "me" : ""} ${m.deletedAt ? "deleted" : ""}`} onContextMenu={(e) => { e.preventDefault(); setContext({ message: m, x: e.clientX, y: e.clientY }); }}>{m.replyTo && <div className="reply-mark">{tx.reply}</div>}<span>{m.deletedAt ? "Message deleted" : m.text}</span>{m.attachment && <div className="attachment">{m.attachment.name}</div>}<div className="message-meta"><span>{new Date(m.at).toLocaleTimeString()}</span><span>{m.delivery}</span></div>{Object.keys(m.reactions).length > 0 && <div className="reactions">{Object.entries(m.reactions).map(([e, n]) => <span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd} /></div>
+              <div className="messages" ref={messagesBox}>{messages.slice(-220).map((m) => <div key={m.id} className={`message-row ${m.from}`}><div className={`message-bubble ${m.from === "me" ? "me" : ""} ${m.deletedAt ? "deleted" : ""}`} onContextMenu={(e) => { e.preventDefault(); setContext({ message: m, x: e.clientX, y: e.clientY }); }}>{m.replyTo && <div className="reply-mark">{tx.reply}</div>}<span>{m.deletedAt ? "Message deleted" : m.text}</span>{m.attachment && <div className="attachment">{m.attachment.name}</div>}<div className="message-meta"><span>{new Date(m.at).toLocaleTimeString()}</span><span>{m.delivery}</span></div>{Object.keys(m.reactions).length > 0 && <div className="reactions">{Object.entries(m.reactions).map(([e, n]) => <span key={e}>{e} {n}</span>)}</div>}</div></div>)}<div ref={messagesEnd} /></div>
 
               {replyTo && <div className="reply-bar">{tx.reply}: {replyTo.text}<button onClick={() => setReplyTo(null)}>×</button></div>}
               {editing && <div className="reply-bar">{tx.edit}<button onClick={() => { setEditing(null); setText(""); }}>×</button></div>}

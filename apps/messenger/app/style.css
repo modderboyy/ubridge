@@ -201,3 +201,8 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (min-width: 981px) { .mobile-back { display: none !important; } }
+
+
+/* fixed-height messenger shell: only lists/messages scroll, page never grows */
+html,body{height:100%;overflow:hidden}.ub-app{height:100dvh;min-height:0;overflow:hidden}.ub-shell{height:100dvh;min-height:0;overflow:hidden}.sidebar,.chat-panel,.info-panel{height:100dvh;min-height:0;overflow:hidden}.chat-panel{display:flex;flex-direction:column}.messages{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}.sidebar-scroll{min-height:0;overscroll-behavior:contain}.sidebar-bottom{overscroll-behavior:contain}.composer{flex:0 0 auto}.chat-header{flex:0 0 auto}.empty-state{min-height:0}
+@media(max-width:980px){html,body{overflow:hidden}.ub-shell{height:100dvh}.ub-shell.chat-open .chat-panel{height:100dvh;min-height:0}.ub-shell:not(.chat-open) .sidebar{height:100dvh}.messages{min-height:0}}
