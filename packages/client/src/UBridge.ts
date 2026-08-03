@@ -16,7 +16,19 @@ export class UBridge {
 
   static async connect(options: UBridgeConnectOptions): Promise<UBridge> {
     await options.transport.open();
-    return new UBridge(options);
+    const bridge = new UBridge(options);
+    await options.transport.send(createPacket({
+      kind: "hello",
+      from: options.identity.userId,
+      payload: {
+        type: "hello",
+        protocol: "ubridge/1",
+        userId: options.identity.userId,
+        deviceId: options.identity.deviceId ?? "default",
+        capabilities: ["message", "presence", "file", "voice-signaling"],
+      },
+    }));
+    return bridge;
   }
 
   async send(to: string, message: TextMessage | string): Promise<UBridgePacket> {

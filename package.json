@@ -12,9 +12,16 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty",
     "clean": "find packages -name dist -type d -prune -exec rm -rf {} +",
-    "test": "node --test"
+    "test": "node --test",
+    "relay:dev": "node examples/production-relay-test/relay.mjs",
+    "demo:prod": "node examples/production-relay-test/demo.mjs"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/node": "^20.17.10",
+    "@types/ws": "^8.5.13"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }

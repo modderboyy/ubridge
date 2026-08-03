@@ -1,5 +1,5 @@
 {
-  "name": "@ubridge/relay",
+  "name": "@ubridge/file",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
@@ -20,6 +20,6 @@
   "dependencies": {
     "@ubridge/core": "0.1.0",
     "@ubridge/protocol": "0.1.0",
-    "ws": "^8.18.0"
+    "@ubridge/crypto": "0.1.0"
   }
 }

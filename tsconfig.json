@@ -14,6 +14,24 @@
       "path": "packages/transport"
     },
     {
+      "path": "packages/discovery"
+    },
+    {
+      "path": "packages/presence"
+    },
+    {
+      "path": "packages/queue"
+    },
+    {
+      "path": "packages/file"
+    },
+    {
+      "path": "packages/voice"
+    },
+    {
+      "path": "packages/sync"
+    },
+    {
       "path": "packages/client"
     },
     {

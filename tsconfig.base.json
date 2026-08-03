@@ -31,6 +31,33 @@
       ],
       "@ubridge/client": [
         "packages/client/src/index.ts"
+      ],
+      "@ubridge/discovery": [
+        "packages/discovery/src/index.ts"
+      ],
+      "@ubridge/presence": [
+        "packages/presence/src/index.ts"
+      ],
+      "@ubridge/queue": [
+        "packages/queue/src/index.ts"
+      ],
+      "@ubridge/file": [
+        "packages/file/src/index.ts"
+      ],
+      "@ubridge/voice": [
+        "packages/voice/src/index.ts"
+      ],
+      "@ubridge/sync": [
+        "packages/sync/src/index.ts"
+      ],
+      "@ubridge/browser": [
+        "packages/browser/src/index.ts"
+      ],
+      "@ubridge/node": [
+        "packages/node/src/index.ts"
+      ],
+      "@ubridge/relay": [
+        "packages/relay/src/index.ts"
       ]
     }
   }
