@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -14,7 +15,9 @@
     "clean": "find packages -name dist -type d -prune -exec rm -rf {} +",
     "test": "node --test",
     "relay:dev": "node examples/production-relay-test/relay.mjs",
-    "demo:prod": "node examples/production-relay-test/demo.mjs"
+    "demo:prod": "node examples/production-relay-test/demo.mjs",
+    "messenger:dev": "npm --workspace @ubridge/messenger run dev",
+    "messenger:build": "npm --workspace @ubridge/messenger run build"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

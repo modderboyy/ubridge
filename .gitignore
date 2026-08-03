@@ -8,3 +8,4 @@ coverage
 *.tsbuildinfo
 .wrangler
 .dev.vars
+.next
