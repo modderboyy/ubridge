@@ -484,6 +484,54 @@ html, body { height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-
 .chat-header { flex: 0 0 auto; }
 .empty-state { min-height: 0; }
 
+/* ========== HEADER POPUP (mobile video top right) ========== */
+.header-popup {
+  position: fixed; z-index: 1000; min-width: 240px; max-width: 300px;
+  background: var(--surface-solid); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow-float); padding: 8px; animation: menu-in .18s ease;
+}
+.header-popup .popup-title { padding: 10px 12px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.header-popup button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 0; background: transparent; color: var(--text); border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left; transition: background .12s; }
+.header-popup button:hover { background: var(--surface-muted); }
+.header-popup button.danger { color: var(--danger); }
+.header-popup .popup-divider { height: 1px; background: var(--border); margin: 6px 0; }
+
+/* ========== REACTIONS BAR (full, top of context menu) ========== */
+.reactions-bar {
+  display: flex; gap: 6px; padding: 8px; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: var(--shadow); position: fixed; z-index: 1001; animation: menu-in .16s ease;
+}
+.reactions-bar button {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-muted);
+  font-size: 18px; display: grid; place-items: center; cursor: pointer; transition: all .12s;
+}
+.reactions-bar button:hover { transform: scale(1.15); background: var(--surface-solid); border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+.reactions-bar button.active { background: var(--accent); border-color: var(--accent); transform: scale(1.1); }
+
+/* ========== TRUSTED RELAY SELECTOR ========== */
+.trusted-modal { position: fixed; inset: 0; z-index: 950; display: grid; place-items: center; background: rgba(5,5,5,.5); backdrop-filter: blur(20px); animation: fade-in .2s; }
+.trusted-card { width: min(440px, 94vw); max-height: 80dvh; overflow: hidden; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow-float); display: flex; flex-direction: column; animation: call-in .3s; }
+.trusted-header { padding: 20px 20px 12px; border-bottom: 1px solid var(--border); }
+.trusted-header h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.trusted-header p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.trusted-list { flex: 1; overflow-y: auto; padding: 12px; display: grid; gap: 4px; }
+.trusted-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px solid transparent; cursor: pointer; transition: all .12s; }
+.trusted-item:hover { background: var(--surface-muted); border-color: var(--border); }
+.trusted-item.selected { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.trusted-item .avatar { width: 40px; height: 40px; font-size: 14px; }
+.trusted-item .check { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; }
+.trusted-item.selected .check { background: var(--accent-contrast); color: var(--accent); border-color: var(--accent-contrast); }
+.trusted-footer { padding: 14px 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+.trusted-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-contrast); font-size: 11px; font-weight: 700; }
+
+/* ========== MESSAGE STATUS ========== */
+.msg-status { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; }
+.msg-status.waiting { color: var(--faint); }
+.msg-status.sent { color: var(--muted); }
+.msg-status.delivered { color: var(--success); }
+.msg-status.read { color: #0a7f2e; font-weight: 700; }
+.msg-status.failed { color: var(--danger); }
+
 /* Safe areas for PWA */
 @supports (padding: max(0px)) {
   .sidebar-top { padding-top: max(20px, env(safe-area-inset-top)); }
