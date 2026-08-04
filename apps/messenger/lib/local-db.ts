@@ -1,4 +1,4 @@
-export type DeliveryState = "sending" | "sent" | "delivered" | "read" | "failed" | "queued";
+export type DeliveryState = "sending" | "sent" | "delivered" | "read" | "failed" | "queued" | "waiting";
 
 export type LocalChat = {
   id: string; // direct:peerId
