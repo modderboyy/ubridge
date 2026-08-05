@@ -12,6 +12,8 @@ export type LocalChat = {
   typing: boolean;
   draft?: string;
   scrollTop?: number;
+  muted?: boolean;
+  blocked?: boolean;
 };
 
 export type LocalMessage = {
@@ -258,6 +260,42 @@ export async function deleteOutbox(id: string) {
 export async function clearOutboxForChat(chatId: string) {
   const items = await listOutbox(chatId);
   for (const it of items) await deleteOutbox(it.id);
+}
+
+export async function clearMessagesForChat(chatId: string) {
+  const msgs = await listMessages(chatId, 1000);
+  await tx(["messages", "search"], "readwrite", async (_db, t) => {
+    const mStore = t.objectStore("messages");
+    const sStore = t.objectStore("search");
+    for (const m of msgs) {
+      mStore.delete(m.id);
+      // delete search tokens for this message - iterate tokens
+      for (const token of tokens(m.text)) {
+        try { sStore.delete(`${token}:${m.id}`); } catch {}
+      }
+    }
+  });
+}
+
+export async function deleteChat(chatId: string) {
+  await tx(["chats", "messages", "search", "outbox"], "readwrite", async (_db, t) => {
+    t.objectStore("chats").delete(chatId);
+    // Clear messages
+    const mStore = t.objectStore("messages");
+    const idx = mStore.index("chatAt");
+    const range = IDBKeyRange.bound([chatId, 0], [chatId, Number.POSITIVE_INFINITY]);
+    await new Promise<void>((resolve, reject) => {
+      const req = idx.openCursor(range);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const cur = req.result;
+        if (!cur) return resolve();
+        mStore.delete(cur.primaryKey);
+        cur.continue();
+      };
+    });
+  });
+  await clearOutboxForChat(chatId);
 }
 
 export function messageId() {
